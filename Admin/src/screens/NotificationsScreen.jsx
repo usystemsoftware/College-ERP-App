@@ -24,25 +24,25 @@ const BASE_URL = 'http://192.168.1.21:5050';
 
 // ─── Palette (matches Dashboard light theme) ─────────────────────────────────
 const C = {
-  bg:          '#F8FAFC',
-  surface:     '#FFFFFF',
-  surfaceAlt:  '#F1F5F9',
-  border:      '#E2E8F0',
-  accent:      '#F59E0B',   // amber — primary brand
-  accentDim:   '#FEF3C7',
-  blue:        '#3B82F6',
-  blueDim:     '#EFF6FF',
-  green:       '#10B981',
-  greenDim:    '#ECFDF5',
-  red:         '#EF4444',
-  redDim:      '#FEF2F2',
-  violet:      '#8B5CF6',
-  violetDim:   '#F5F3FF',
-  text:        '#0F172A',
-  textMuted:   '#475569',
-  textSub:     '#94A3B8',
-  unreadBg:    '#FFFBEB',
-  unreadBorder:'#FDE68A',
+  bg: '#F8FAFC',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F1F5F9',
+  border: '#E2E8F0',
+  accent: '#F59E0B',   // amber — primary brand
+  accentDim: '#FEF3C7',
+  blue: '#3B82F6',
+  blueDim: '#EFF6FF',
+  green: '#10B981',
+  greenDim: '#ECFDF5',
+  red: '#EF4444',
+  redDim: '#FEF2F2',
+  violet: '#8B5CF6',
+  violetDim: '#F5F3FF',
+  text: '#0F172A',
+  textMuted: '#475569',
+  textSub: '#94A3B8',
+  unreadBg: '#FFFBEB',
+  unreadBorder: '#FDE68A',
 };
 
 // ─── Category Config ─────────────────────────────────────────────────────────
@@ -50,14 +50,14 @@ function getCategoryConfig(type) {
   switch (type?.toLowerCase()) {
     case 'alert':
     case 'warning':
-      return { Icon: AlertTriangle, color: C.red,    bg: C.redDim,    label: 'Alert'   };
+      return { Icon: AlertTriangle, color: C.red, bg: C.redDim, label: 'Alert' };
     case 'event':
     case 'calendar':
-      return { Icon: Calendar,      color: C.violet,  bg: C.violetDim, label: 'Event'   };
+      return { Icon: Calendar, color: C.violet, bg: C.violetDim, label: 'Event' };
     case 'message':
-      return { Icon: MessageSquare, color: C.blue,    bg: C.blueDim,   label: 'Message' };
+      return { Icon: MessageSquare, color: C.blue, bg: C.blueDim, label: 'Message' };
     default:
-      return { Icon: Info,          color: C.accent,  bg: C.accentDim, label: 'Notice'  };
+      return { Icon: Info, color: C.accent, bg: C.accentDim, label: 'Notice' };
   }
 }
 
@@ -65,11 +65,11 @@ function getCategoryConfig(type) {
 function timeAgo(dateString) {
   if (!dateString) return '';
   const diff = Math.floor((Date.now() - new Date(dateString)) / 1000);
-  if (diff < 60)   return 'Just now';
+  if (diff < 60) return 'Just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   const days = Math.floor(diff / 86400);
-  if (days < 7)    return `${days}d ago`;
+  if (days < 7) return `${days}d ago`;
   return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
@@ -78,19 +78,19 @@ function NotificationCard({ item, onMarkRead, onDelete, index }) {
   const isUnread = !item.isRead;
   const { Icon, color, bg, label } = getCategoryConfig(item.type);
 
-  const opacity    = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(16)).current;
   const pressScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity,    { toValue: 1, duration: 420, delay: index * 55, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 420, delay: index * 55, useNativeDriver: true }),
       Animated.timing(translateY, { toValue: 0, duration: 420, delay: index * 55, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const onPressIn  = () => Animated.spring(pressScale, { toValue: 0.975, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(pressScale, { toValue: 1,     useNativeDriver: true }).start();
+  const onPressIn = () => Animated.spring(pressScale, { toValue: 0.975, useNativeDriver: true }).start();
+  const onPressOut = () => Animated.spring(pressScale, { toValue: 1, useNativeDriver: true }).start();
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
@@ -211,12 +211,12 @@ export default function NotificationsScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
 
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount]     = useState(0);
-  const [isLoading, setIsLoading]         = useState(true);
-  const [isRefreshing, setIsRefreshing]   = useState(false);
-  const [page, setPage]                   = useState(1);
-  const [totalPages, setTotalPages]       = useState(1);
-  const [activeTab, setActiveTab]         = useState('All');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [activeTab, setActiveTab] = useState('All');
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const headers = { Authorization: `Bearer ${userToken}` };
@@ -256,7 +256,7 @@ export default function NotificationsScreen({ navigation }) {
       await axios.patch(`${BASE_URL}/api/notifications/${id}/read`, null, { headers });
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (err) {}
+    } catch (err) { }
   };
 
   const handleMarkAllRead = async () => {
@@ -264,7 +264,7 @@ export default function NotificationsScreen({ navigation }) {
       await axios.patch(`${BASE_URL}/api/notifications/mark-all-read`, null, { headers });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
-    } catch (err) {}
+    } catch (err) { }
   };
 
   const handleDelete = (id) => {
@@ -281,7 +281,7 @@ export default function NotificationsScreen({ navigation }) {
               const removed = notifications.find(n => n._id === id);
               setNotifications(prev => prev.filter(n => n._id !== id));
               if (removed && !removed.isRead) setUnreadCount(prev => Math.max(0, prev - 1));
-            } catch (err) {}
+            } catch (err) { }
           },
         },
       ]
@@ -290,9 +290,9 @@ export default function NotificationsScreen({ navigation }) {
 
   // Filter logic
   const filteredNotifications = notifications.filter(n => {
-    if (activeTab === 'Unread')  return !n.isRead;
-    if (activeTab === 'Alerts')  return ['alert', 'warning'].includes(n.type?.toLowerCase());
-    if (activeTab === 'Events')  return ['event', 'calendar'].includes(n.type?.toLowerCase());
+    if (activeTab === 'Unread') return !n.isRead;
+    if (activeTab === 'Alerts') return ['alert', 'warning'].includes(n.type?.toLowerCase());
+    if (activeTab === 'Events') return ['event', 'calendar'].includes(n.type?.toLowerCase());
     return true;
   });
 
