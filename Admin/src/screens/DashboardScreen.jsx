@@ -1,20 +1,14 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  ActivityIndicator,
-  Dimensions,
-  TouchableOpacity,
-  Animated,
-  StatusBar,
-  Image
+  StyleSheet, Text, View, ScrollView, ActivityIndicator,
+  Dimensions, TouchableOpacity, Animated, StatusBar, Image,
+  RefreshControl,
 } from 'react-native';
 import {
   Users, BookOpen, DollarSign, Clock, Bell, LogOut,
   GraduationCap, Calendar, ClipboardCheck, Archive,
-  Book, Shield, TrendingUp, ChevronRight, ArrowUpRight,
+  Book, Shield, TrendingUp, ChevronRight, Zap,
+  Activity, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,210 +18,605 @@ import { getDashboardStats } from '../api/dashboard.api';
 
 const { width: SW } = Dimensions.get('window');
 
-// ─── Design Tokens ───────────────────────────────────────────────────────────
+// ─── Tokens ──────────────────────────────────────────────────────────────────
 const C = {
-  bg: '#F8FAFC',
-  bgDeep: '#F1F5F9',
-  surface: '#FFFFFF',
-  surfaceUp: '#F1F5F9',
-  border: '#E2E8F0',
-  cream: '#0F172A',      // primary text (dark on light)
-  amber: '#F59E0B',
-  amberDim: '#FEF3C7',
-  amberGlow: '#FDE68A',
-  green: '#10B981',
-  greenDim: '#ECFDF5',
-  blue: '#3B82F6',
-  blueDim: '#EFF6FF',
-  violet: '#8B5CF6',
+  // Page
+  bg: '#F0F3FA',
+  bgDeep: '#E3E8F2',
+  // Hero banner
+  hero1: '#0F1B44',
+  hero2: '#1E3A8A',
+  hero3: '#3B5BDB',
+  heroRing: 'rgba(255,255,255,0.06)',
+  heroText: '#FFFFFF',
+  heroSub: 'rgba(255,255,255,0.55)',
+  // Cards
+  card: '#FFFFFF',
+  cardHover: '#FAFBFF',
+  border: 'rgba(99,120,180,0.10)',
+  borderFocus: 'rgba(59,91,219,0.18)',
+  // Brand
+  indigo: '#3B5BDB',
+  indigoDim: '#EEF2FF',
+  // Semantic
+  emerald: '#0D9488',
+  emeraldDim: '#F0FDFA',
+  rose: '#E11D48',
+  roseDim: '#FFF1F2',
+  violet: '#7C3AED',
   violetDim: '#F5F3FF',
-  red: '#EF4444',
-  redDim: '#FEF2F2',
-  text: '#0F172A',
-  textMid: '#475569',
-  textDim: '#94A3B8',
+  amber: '#D97706',
+  amberDim: '#FFFBEB',
+  sky: '#0284C7',
+  skyDim: '#F0F9FF',
+  // Text
+  ink: '#111827',
+  inkMid: '#374151',
+  inkSoft: '#6B7280',
+  inkFaint: '#9CA3AF',
+  shadow: '#0F1B44',
 };
 
-const QUICK_ACTIONS = [
-  { name: 'Faculty', icon: GraduationCap, from: '#F0A500', to: '#C07000', num: '01' },
-  { name: 'Attendance', icon: ClipboardCheck, from: '#F05252', to: '#B02020', num: '02' },
-  { name: 'Inventory', icon: Archive, from: '#6366F1', to: '#3730A3', num: '03' },
-  { name: 'Timetable', icon: Calendar, from: '#F472B6', to: '#BE185D', num: '04' },
-  { name: 'Library', icon: Book, from: '#38BDF8', to: '#0369A1', num: '05' },
-  { name: 'Gate Passes', icon: Shield, from: '#1DB874', to: '#065F46', num: '06' },
-];
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, iconColor, title, value, sub, subColor, delay = 0 }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
+function fmt(n) {
+  if (!n) return '₹0';
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
+  if (n >= 1e3) return `₹${(n / 1e3).toFixed(0)}k`;
+  return `₹${n}`;
+}
+
+// ─── Animated entry hook ──────────────────────────────────────────────────────
+function useEntry(delay = 0, dy = 20) {
+  const op = useRef(new Animated.Value(0)).current;
+  const ty = useRef(new Animated.Value(dy)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(op, { toValue: 1, duration: 500, delay, useNativeDriver: true }),
+      Animated.timing(ty, { toValue: 0, duration: 500, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return [op, ty];
+}
+
+// ─── Pulse animation for live dot ─────────────────────────────────────────────
+function PulseDot() {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const pulseOp = useRef(new Animated.Value(0.7)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulse, { toValue: 2.2, duration: 1200, useNativeDriver: true }),
+          Animated.timing(pulse, { toValue: 1, duration: 0, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseOp, { toValue: 0, duration: 1200, useNativeDriver: true }),
+          Animated.timing(pulseOp, { toValue: 0.7, duration: 0, useNativeDriver: true }),
+        ]),
+      ])
+    ).start();
+  }, []);
+  return (
+    <View style={{ width: 6, height: 6 }}>
+      <Animated.View style={{
+        position: 'absolute', width: 6, height: 6, borderRadius: 3,
+        backgroundColor: '#4ADE80', transform: [{ scale: pulse }], opacity: pulseOp,
+      }} />
+      <View style={{
+        width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ADE80',
+      }} />
+    </View>
+  );
+}
+
+// ─── Section Label ────────────────────────────────────────────────────────────
+function Label({ text, action, delay = 0 }) {
+  const [op, ty] = useEntry(delay);
+  return (
+    <Animated.View style={[labelSt.row, { opacity: op, transform: [{ translateY: ty }] }]}>
+      <Text style={labelSt.text}>{text}</Text>
+      {action && (
+        <TouchableOpacity style={labelSt.btn} activeOpacity={0.6}>
+          <Text style={labelSt.btnText}>{action}</Text>
+          <ChevronRight size={12} color={C.indigo} strokeWidth={2.5} />
+        </TouchableOpacity>
+      )}
+    </Animated.View>
+  );
+}
+const labelSt = StyleSheet.create({
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 4 },
+  text: { fontSize: 11, fontWeight: '700', color: C.inkSoft, letterSpacing: 1.2, textTransform: 'uppercase' },
+  btn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  btnText: { fontSize: 12, fontWeight: '600', color: C.indigo },
+});
+
+// ─── Hero Banner ──────────────────────────────────────────────────────────────
+function HeroBanner({ stats }) {
+  const op = useRef(new Animated.Value(0)).current;
+  const ty = useRef(new Animated.Value(-16)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 550, delay, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 550, delay, useNativeDriver: true }),
+      Animated.timing(op, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(ty, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start();
   }, []);
 
+  const today = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+
   return (
-    <Animated.View style={[styles.statCard, { opacity, transform: [{ translateY }] }]}>
-      <View style={[styles.statAccentLine, { backgroundColor: iconColor }]} />
-      <View style={styles.statInner}>
-        <View style={[styles.statIconRing, { borderColor: iconColor + '55', backgroundColor: iconColor + '15' }]}>
-          <Icon size={16} color={iconColor} />
+    <Animated.View style={[heroSt.card, { opacity: op, transform: [{ translateY: ty }] }]}>
+      {/* Accent bar on the left */}
+      <View style={heroSt.accentBar} />
+
+      {/* Main content */}
+      <View style={heroSt.body}>
+        {/* Top row: greeting + live */}
+        <View style={heroSt.topRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={heroSt.greeting}>{getGreeting()} 👋</Text>
+            <Text style={heroSt.collegeName}>SK Patil College</Text>
+          </View>
+          <View style={heroSt.liveRow}>
+            <PulseDot />
+            <Text style={heroSt.liveText}>LIVE</Text>
+          </View>
         </View>
-        <Text style={styles.statLabel}>{title}</Text>
-        <Text style={styles.statValue}>{value}</Text>
-        <Text style={[styles.statSub, { color: subColor || C.textDim }]}>{sub}</Text>
+
+        {/* Date row */}
+        <View style={heroSt.dateRow}>
+          <Calendar size={13} color={C.inkSoft} strokeWidth={2} />
+          <Text style={heroSt.date}>{today}</Text>
+        </View>
+
+        {/* Divider */}
+        <View style={heroSt.divider} />
+
+        {/* Stats row */}
+        <View style={heroSt.statsRow}>
+          <View style={heroSt.statItem}>
+            <View style={[heroSt.statDot, { backgroundColor: C.indigo }]} />
+            <Text style={heroSt.statVal}>{stats?.totalStudents || '—'}</Text>
+            <Text style={heroSt.statLabel}>Students</Text>
+          </View>
+          <View style={heroSt.statItem}>
+            <View style={[heroSt.statDot, { backgroundColor: C.emerald }]} />
+            <Text style={heroSt.statVal}>{fmt(stats?.revenue)}</Text>
+            <Text style={heroSt.statLabel}>Revenue</Text>
+          </View>
+          <View style={heroSt.statItem}>
+            <View style={[heroSt.statDot, { backgroundColor: C.amber }]} />
+            <Text style={heroSt.statVal}>{stats?.pendingApprovals || '—'}</Text>
+            <Text style={heroSt.statLabel}>Pending</Text>
+          </View>
+        </View>
       </View>
     </Animated.View>
   );
 }
+const heroSt = StyleSheet.create({
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 22,
+    marginBottom: 24,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.border,
+    shadowColor: C.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  accentBar: {
+    width: 5,
+    backgroundColor: C.indigo,
+    borderTopLeftRadius: 22,
+    borderBottomLeftRadius: 22,
+  },
+  body: {
+    flex: 1,
+    padding: 20,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  greeting: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: C.ink,
+    letterSpacing: -0.4,
+    marginBottom: 4,
+  },
+  collegeName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.inkSoft,
+    letterSpacing: 0.1,
+  },
+  liveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: C.emeraldDim,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: C.emerald + '30',
+  },
+  liveText: {
+    color: C.emerald,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  date: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.inkFaint,
+    letterSpacing: 0.1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: C.bgDeep,
+    marginBottom: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginBottom: 6,
+  },
+  statVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.ink,
+    letterSpacing: -0.4,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: C.inkFaint,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+});
 
-// ─── Quick Tile ───────────────────────────────────────────────────────────────
-function QuickTile({ name, icon: Icon, from, to, num, delay = 0 }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const slideX = useRef(new Animated.Value(28)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 500, delay, useNativeDriver: true }),
-      Animated.timing(slideX, { toValue: 0, duration: 500, delay, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  const onPressIn = () => Animated.spring(scale, { toValue: 0.93, friction: 5, useNativeDriver: true }).start();
-  const onPressOut = () => Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
-
+// ─── Metric Chip (horizontal scroll) ──────────────────────────────────────────
+function MetricChip({ icon: Icon, color, dimColor, label, value, trend, delay = 0 }) {
+  const [op, ty] = useEntry(delay, 14);
+  const isPositive = trend >= 0;
   return (
-    <Animated.View style={{ opacity, transform: [{ translateX: slideX }, { scale }] }}>
-      <TouchableOpacity activeOpacity={1} onPressIn={onPressIn} onPressOut={onPressOut} style={styles.quickTile}>
-        <View style={[styles.quickTileBg, { backgroundColor: from }]}>
-          <View style={[styles.quickTileShade, { backgroundColor: to }]} />
+    <Animated.View style={[chipSt.chip, { opacity: op, transform: [{ translateY: ty }] }]}>
+      <View style={chipSt.topRow}>
+        <View style={[chipSt.iconBox, { backgroundColor: dimColor }]}>
+          <Icon size={16} color={color} strokeWidth={2.2} />
         </View>
-        <Text style={styles.quickTileNum}>{num}</Text>
-        <View style={styles.quickTileContent}>
-          <View style={styles.quickTileIconBox}>
-            <Icon size={22} color="#fff" strokeWidth={2} />
+        {trend !== undefined && (
+          <View style={[chipSt.trendBadge, { backgroundColor: isPositive ? C.emeraldDim : C.roseDim }]}>
+            {isPositive
+              ? <ArrowUpRight size={10} color={C.emerald} strokeWidth={2.5} />
+              : <ArrowDownRight size={10} color={C.rose} strokeWidth={2.5} />}
+            <Text style={[chipSt.trendText, { color: isPositive ? C.emerald : C.rose }]}>
+              {Math.abs(trend)}%
+            </Text>
           </View>
-          <View style={styles.quickTileFooter}>
-            <Text style={styles.quickTileName}>{name}</Text>
-            <ArrowUpRight size={13} color="rgba(255,255,255,0.65)" />
-          </View>
+        )}
+      </View>
+      <Text style={chipSt.val}>{value}</Text>
+      <Text style={chipSt.label}>{label}</Text>
+    </Animated.View>
+  );
+}
+const chipSt = StyleSheet.create({
+  chip: {
+    backgroundColor: C.card, borderRadius: 18, padding: 16,
+    width: 120, marginRight: 10,
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    alignItems: 'flex-start',
+  },
+  topRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', width: '100%', marginBottom: 12,
+  },
+  iconBox: {
+    width: 36, height: 36, borderRadius: 11,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  trendBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 1,
+    paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6,
+  },
+  trendText: { fontSize: 9, fontWeight: '700' },
+  val: { fontSize: 22, fontWeight: '800', color: C.ink, letterSpacing: -0.5, marginBottom: 2 },
+  label: { fontSize: 10, fontWeight: '600', color: C.inkSoft, letterSpacing: 0.3 },
+});
+
+// ─── Activity Summary Card ────────────────────────────────────────────────────
+function ActivitySummary({ stats, delay = 0 }) {
+  const [op, ty] = useEntry(delay);
+  const items = [
+    { icon: Users, color: C.indigo, label: 'New admissions today', value: stats?.todayAdmissions || 0 },
+    { icon: DollarSign, color: C.emerald, label: 'Fees collected today', value: fmt(stats?.todayFees || 0) },
+    { icon: Activity, color: C.violet, label: 'Active classes now', value: stats?.activeClasses || 0 },
+  ];
+  return (
+    <Animated.View style={[actSt.card, { opacity: op, transform: [{ translateY: ty }] }]}>
+      <View style={actSt.header}>
+        <View style={actSt.headerIcon}>
+          <Activity size={14} color={C.indigo} strokeWidth={2.5} />
+        </View>
+        <Text style={actSt.headerTitle}>Today's Activity</Text>
+      </View>
+      {items.map((item, i) => (
+        <View key={i} style={[actSt.row, i < items.length - 1 && actSt.rowBorder]}>
+          <View style={[actSt.dot, { backgroundColor: item.color }]} />
+          <Text style={actSt.label}>{item.label}</Text>
+          <Text style={[actSt.value, { color: item.color }]}>{item.value}</Text>
+        </View>
+      ))}
+    </Animated.View>
+  );
+}
+const actSt = StyleSheet.create({
+  card: {
+    backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 24,
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  headerIcon: {
+    width: 28, height: 28, borderRadius: 9, backgroundColor: C.indigoDim,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  headerTitle: { fontSize: 13, fontWeight: '700', color: C.ink, letterSpacing: -0.1 },
+  row: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
+  },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: C.bgDeep },
+  dot: { width: 6, height: 6, borderRadius: 3, marginRight: 10 },
+  label: { flex: 1, fontSize: 13, fontWeight: '500', color: C.inkMid },
+  value: { fontSize: 15, fontWeight: '800', letterSpacing: -0.3 },
+});
+
+// ─── Quick Access Row ─────────────────────────────────────────────────────────
+function QuickRow({ name, icon: Icon, color, dimColor, hint, delay = 0 }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const [op, ty] = useEntry(delay, 12);
+  const onIn = () => Animated.spring(scale, { toValue: 0.97, friction: 6, useNativeDriver: true }).start();
+  const onOut = () => Animated.spring(scale, { toValue: 1, friction: 6, useNativeDriver: true }).start();
+  return (
+    <Animated.View style={{ opacity: op, transform: [{ translateY: ty }, { scale }] }}>
+      <TouchableOpacity activeOpacity={1} onPressIn={onIn} onPressOut={onOut} style={quickRowSt.row}>
+        <View style={[quickRowSt.iconPill, { backgroundColor: dimColor }]}>
+          <Icon size={20} color={color} strokeWidth={2} />
+        </View>
+        <View style={quickRowSt.textBlock}>
+          <Text style={quickRowSt.name}>{name}</Text>
+          <Text style={quickRowSt.hint}>{hint}</Text>
+        </View>
+        <View style={[quickRowSt.arrow, { backgroundColor: dimColor }]}>
+          <ChevronRight size={16} color={color} strokeWidth={2.5} />
         </View>
       </TouchableOpacity>
     </Animated.View>
   );
 }
+const quickRowSt = StyleSheet.create({
+  row: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.card, borderRadius: 16, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  iconPill: {
+    width: 46, height: 46, borderRadius: 14,
+    justifyContent: 'center', alignItems: 'center', marginRight: 14,
+  },
+  textBlock: { flex: 1 },
+  name: { fontSize: 14, fontWeight: '700', color: C.ink, marginBottom: 2 },
+  hint: { fontSize: 11, color: C.inkSoft, fontWeight: '400' },
+  arrow: {
+    width: 32, height: 32, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+  },
+});
 
-// ─── Section Header ───────────────────────────────────────────────────────────
-function SectionHeader({ title, action }) {
-  return (
-    <View style={styles.sectionRow}>
-      <View style={styles.sectionLeft}>
-        <View style={styles.sectionPip} />
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
-      {action && (
-        <TouchableOpacity style={styles.sectionAction}>
-          <Text style={styles.sectionActionText}>{action}</Text>
-          <ChevronRight size={12} color={C.amber} />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
+// ─── Quick data ───────────────────────────────────────────────────────────────
+const QUICK = [
+  { name: 'Faculty', icon: GraduationCap, color: C.amber, dimColor: C.amberDim, hint: 'Staff records & schedules' },
+  { name: 'Attendance', icon: ClipboardCheck, color: C.rose, dimColor: C.roseDim, hint: 'Daily tracking & reports' },
+  { name: 'Inventory', icon: Archive, color: C.violet, dimColor: C.violetDim, hint: 'Assets & stock management' },
+  { name: 'Timetable', icon: Calendar, color: C.indigo, dimColor: C.indigoDim, hint: 'Class schedules & rooms' },
+  { name: 'Library', icon: Book, color: C.sky, dimColor: C.skyDim, hint: 'Books & issue management' },
+  { name: 'Gate Passes', icon: Shield, color: C.emerald, dimColor: C.emeraldDim, hint: 'Entry & exit permissions' },
+];
 
 // ─── Chart Card ───────────────────────────────────────────────────────────────
-function ChartCard({ title, meta, labels, values, color, MetaIcon }) {
-  const hexToRgba = (hex, op) => {
+function ChartCard({ title, meta, labels, values, color, MetaIcon, delay = 0 }) {
+  const [op, ty] = useEntry(delay);
+  const hexToRgba = (hex, a) => {
     const h = hex.replace('#', '');
-    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-    return `rgba(${r},${g},${b},${op})`;
+    return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
   };
-
   return (
-    <View style={styles.chartCard}>
-      <View style={styles.chartHeader}>
+    <Animated.View style={[chartSt.card, { opacity: op, transform: [{ translateY: ty }] }]}>
+      <View style={chartSt.header}>
         <View>
-          <Text style={styles.chartTitle}>{title}</Text>
-          <View style={styles.chartMetaRow}>
-            <View style={[styles.chartDot, { backgroundColor: color }]} />
-            <Text style={styles.chartMetaText}>{meta}</Text>
-            {MetaIcon && <MetaIcon size={13} color={color} style={{ marginLeft: 4 }} />}
+          <Text style={chartSt.title}>{title}</Text>
+          <View style={chartSt.metaRow}>
+            <View style={[chartSt.dot, { backgroundColor: color }]} />
+            <Text style={chartSt.metaText}>{meta}</Text>
+            {MetaIcon && <MetaIcon size={12} color={color} style={{ marginLeft: 3 }} />}
           </View>
         </View>
-        <View style={[styles.chartBadge, { backgroundColor: color + '18', borderColor: color + '44' }]}>
-          <Text style={[styles.chartBadgeText, { color }]}>YTD</Text>
-        </View>
+        <TouchableOpacity style={[chartSt.viewBtn, { borderColor: color + '44', backgroundColor: color + '10' }]}>
+          <Text style={[chartSt.viewBtnText, { color }]}>View full</Text>
+          <ChevronRight size={11} color={color} />
+        </TouchableOpacity>
       </View>
       <LineChart
         data={{ labels, datasets: [{ data: values }] }}
         width={SW - 76}
-        height={190}
+        height={180}
         chartConfig={{
-          backgroundColor: C.surface,
-          backgroundGradientFrom: C.surface,
-          backgroundGradientTo: C.surface,
+          backgroundColor: C.card,
+          backgroundGradientFrom: C.card,
+          backgroundGradientTo: C.card,
           decimalPlaces: 0,
-          color: (op = 1) => hexToRgba(color, op),
-          labelColor: () => C.textDim,
-          propsForBackgroundLines: { stroke: C.border, strokeDasharray: '3 3' },
+          color: (a = 1) => hexToRgba(color, a),
+          labelColor: () => C.inkFaint,
+          propsForBackgroundLines: { stroke: C.bgDeep, strokeDasharray: '3 3' },
           propsForDots: { r: '4', strokeWidth: '2', stroke: color },
         }}
         bezier
         withOuterLines={false}
-        style={styles.chartLine}
+        style={chartSt.line}
       />
+    </Animated.View>
+  );
+}
+const chartSt = StyleSheet.create({
+  card: {
+    backgroundColor: C.card, borderRadius: 20, padding: 18,
+    marginBottom: 24, borderWidth: 1, borderColor: C.border,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07, shadowRadius: 10, elevation: 3, overflow: 'hidden',
+  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
+  title: { fontSize: 15, fontWeight: '700', color: C.ink, letterSpacing: -0.2, marginBottom: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  metaText: { color: C.inkSoft, fontSize: 12, fontWeight: '500' },
+  viewBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1,
+  },
+  viewBtnText: { fontSize: 11, fontWeight: '600' },
+  line: { marginLeft: -18, borderRadius: 0 },
+});
+
+// ─── Skeleton Loader ──────────────────────────────────────────────────────────
+function SkeletonLoader() {
+  const shimmer = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const Bar = ({ width, height = 14, mb = 8 }) => (
+    <Animated.View style={{
+      width, height, borderRadius: height / 2,
+      backgroundColor: '#D1D5DB', opacity: shimmer, marginBottom: mb,
+    }} />
+  );
+
+  return (
+    <View style={skelSt.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+      {/* Hero skeleton */}
+      <View style={skelSt.hero}>
+        <Bar width="45%" height={12} />
+        <Bar width="65%" height={22} mb={12} />
+        <Bar width="30%" height={10} mb={20} />
+        <View style={skelSt.spotRow}>
+          <Bar width="60" height={18} />
+          <Bar width="60" height={18} />
+          <Bar width="60" height={18} />
+        </View>
+      </View>
+      {/* Chips skeleton */}
+      <View style={skelSt.chipRow}>
+        {[0,1,2,3].map(i => (
+          <Animated.View key={i} style={[skelSt.chip, { opacity: shimmer }]} />
+        ))}
+      </View>
+      {/* Rows skeleton */}
+      {[0,1,2].map(i => (
+        <Animated.View key={i} style={[skelSt.row, { opacity: shimmer }]} />
+      ))}
     </View>
   );
 }
+const skelSt = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 20, paddingTop: 60 },
+  hero: {
+    backgroundColor: '#1E293B', borderRadius: 24, padding: 22,
+    marginBottom: 24, minHeight: 190,
+  },
+  spotRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 10 },
+  chipRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  chip: { width: 110, height: 100, borderRadius: 16, backgroundColor: '#E2E8F0' },
+  row: { height: 60, borderRadius: 16, backgroundColor: '#E2E8F0', marginBottom: 8 },
+});
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
   const [stats, setStats] = useState(null);
   const [isLoading, setLoading] = useState(true);
+  const [isRefreshing, setRefreshing] = useState(false);
   const { userToken, signOut } = useContext(AuthContext);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  const headerOpacity = useRef(new Animated.Value(0)).current;
-  const headerSlide = useRef(new Animated.Value(-12)).current;
+  useEffect(() => { fetchData(); }, []);
 
-  useEffect(() => {
-    fetchData();
-    Animated.parallel([
-      Animated.timing(headerOpacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-      Animated.timing(headerSlide, { toValue: 0, duration: 600, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
     try {
       const res = await getDashboardStats();
       if (res.data?.success && res.data?.data?.stats) setStats(res.data.data.stats);
     } catch (_) { }
-    finally { setLoading(false); }
+    finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
-  const fmt = (n) => {
-    if (!n) return '$0';
-    if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-    if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}k`;
-    return `$${n}`;
-  };
+  const onRefresh = useCallback(() => fetchData(true), []);
 
-  if (isLoading) {
-    return (
-      <View style={styles.loader}>
-        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
-        <ActivityIndicator size="large" color={C.amber} />
-        <Text style={styles.loaderText}>Loading Dashboard…</Text>
-      </View>
-    );
-  }
+  if (isLoading) return <SkeletonLoader />;
 
   const revLabels = stats?.revenueData?.map(i => i.name) || ['Jan'];
   const revVals = stats?.revenueData?.map(i => i.revenue || 0) || [0];
@@ -238,63 +627,69 @@ export default function DashboardScreen() {
     <>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
       <ScrollView
-        style={styles.root}
-        contentContainerStyle={[styles.scroll, { paddingTop: Math.max(insets.top, 20) }]}
+        style={st.root}
+        contentContainerStyle={[st.scroll, { paddingTop: Math.max(insets.top + 8, 24) }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={C.indigo}
+            colors={[C.indigo]}
+            progressBackgroundColor={C.card}
+          />
+        }
       >
-        {/* Header */}
-        <Animated.View style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}>
-          <View style={styles.headerText}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <Image 
-                source={require('../../assets/logo.png')} 
-                style={{ width: 24, height: 24, resizeMode: 'contain', marginRight: 8 }} 
-              />
-              <Text style={styles.headerEyebrow}>SK Patil College</Text>
-            </View>
-            <View style={styles.headerTitleRow}>
-              <Text style={styles.headerTitle}>Analytics</Text>
-              <View style={styles.liveChip}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveLabel}>LIVE</Text>
-              </View>
-            </View>
-            <Text style={styles.headerSub}>Operations · Finance · Insights</Text>
-          </View>
-          <View style={styles.headerBtns}>
-            <TouchableOpacity style={styles.hBtn} onPress={() => navigation.navigate('Notifications')}>
-              <Bell size={17} color={C.textMid} />
-              <View style={styles.hBtnDot} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.hBtn, styles.hBtnRed]} onPress={signOut}>
-              <LogOut size={17} color={C.red} />
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
 
-        {/* Stats */}
-        <SectionHeader title="Key Metrics" />
-        <View style={styles.statGrid}>
-          <StatCard icon={Users} iconColor={C.blue} title="Students" value={stats?.totalStudents || 0} sub="Active Enrolled" delay={0} />
-          <StatCard icon={BookOpen} iconColor={C.violet} title="Faculty" value={stats?.totalFaculty || 0} sub={`${stats?.totalDepartments || 0} Depts`} delay={80} />
-          <StatCard icon={DollarSign} iconColor={C.green} title="Revenue" value={fmt(stats?.revenue)} sub="Total Collected" subColor={C.green} delay={160} />
-          <StatCard icon={Clock} iconColor={C.amber} title="Pending" value={stats?.pendingApprovals || 0} sub="Approvals" delay={240} />
+        {/* ── Top bar ────────────────────────────────────────── */}
+        <View style={st.topBar}>
+          <View style={st.topBarLeft}>
+            <Image source={require('../../assets/logo.png')} style={st.logo} />
+            <View style={st.topBarTitle}>
+              <Text style={st.topBarName}>SK Patil</Text>
+              <Text style={st.topBarSub}>Admin Portal</Text>
+            </View>
+          </View>
+          <View style={st.topBarRight}>
+            <TouchableOpacity style={st.iconBtn} onPress={() => navigation.navigate('Notifications')} activeOpacity={0.7}>
+              <Bell size={18} color={C.inkMid} strokeWidth={2} />
+              <View style={st.notifBadge} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[st.iconBtn, st.iconBtnRed]} onPress={signOut} activeOpacity={0.7}>
+              <LogOut size={18} color={C.rose} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Quick Access */}
-        <SectionHeader title="Quick Access" />
-        <View style={styles.quickGrid}>
-          {QUICK_ACTIONS.map((a, i) => (
-            <QuickTile key={i} {...a} delay={i * 65} />
+        {/* ── Hero Banner ────────────────────────────────────── */}
+        <HeroBanner stats={stats} />
+
+        {/* ── Overview chips ──────────────────────────────────── */}
+        <Label text="Overview" delay={200} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }}>
+          <MetricChip icon={Users} color={C.indigo} dimColor={C.indigoDim} label="Students" value={stats?.totalStudents || 0} trend={12} delay={220} />
+          <MetricChip icon={BookOpen} color={C.violet} dimColor={C.violetDim} label="Faculty" value={stats?.totalFaculty || 0} trend={3} delay={280} />
+          <MetricChip icon={Zap} color={C.amber} dimColor={C.amberDim} label="Depts" value={stats?.totalDepartments || 0} delay={340} />
+          <MetricChip icon={Clock} color={C.rose} dimColor={C.roseDim} label="Pending" value={stats?.pendingApprovals || 0} trend={-5} delay={400} />
+        </ScrollView>
+
+        {/* ── Today's Activity ────────────────────────────────── */}
+        <ActivitySummary stats={stats} delay={420} />
+
+        {/* ── Quick Access ───────────────────────────────────── */}
+        <Label text="Quick Access" delay={460} />
+        <View style={st.quickGrid}>
+          {QUICK.map((q, i) => (
+            <QuickRow key={i} {...q} delay={480 + i * 50} />
           ))}
         </View>
 
-        {/* Charts */}
-        <SectionHeader title="Financial Overview" action="Full Report" />
-        <ChartCard title="Revenue" meta="Year to date" labels={revLabels} values={revVals} color="#1DB874" MetaIcon={TrendingUp} />
+        {/* ── Charts ─────────────────────────────────────────── */}
+        <Label text="Financial Overview" action="Full report" delay={620} />
+        <ChartCard title="Revenue" meta="Year to date" labels={revLabels} values={revVals} color={C.emerald} MetaIcon={TrendingUp} delay={640} />
 
-        <SectionHeader title="Admission Trends" action="Full Report" />
-        <ChartCard title="Admissions" meta="Current cycle" labels={admLabels} values={admVals} color="#4B8EF5" />
+        <Label text="Admissions" action="Full report" delay={700} />
+        <ChartCard title="New Admissions" meta="Current cycle" labels={admLabels} values={admVals} color={C.indigo} delay={720} />
 
         <View style={{ height: 48 }} />
       </ScrollView>
@@ -302,152 +697,37 @@ export default function DashboardScreen() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-const TILE_W = Math.floor((SW - 40 - 20) / 3); // 3 cols, 20px side padding, 10px gaps
-
-const styles = StyleSheet.create({
+// ─── Root Styles ─────────────────────────────────────────────────────────────
+const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  scroll: { paddingHorizontal: 20, paddingBottom: 20 },
-  loader: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  loaderText: { color: C.textDim, fontSize: 13 },
+  scroll: { paddingHorizontal: 20 },
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 30,
+  topBar: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 20,
   },
-  headerText: { flex: 1 },
-  headerEyebrow: {
-    color: C.textDim,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-    marginBottom: 3,
-  },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTitle: {
-    color: C.cream,
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -1.2,
-  },
-  liveChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: C.green + '20',
-    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
-    borderWidth: 1, borderColor: C.green + '50',
-    marginTop: 6,
-  },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.green },
-  liveLabel: { color: C.green, fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
-  headerSub: { color: C.textDim, fontSize: 11, marginTop: 5, letterSpacing: 0.3 },
-  headerBtns: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  hBtn: {
-    width: 40, height: 40, borderRadius: 13,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  topBarLeft: { flexDirection: 'row', alignItems: 'center' },
+  topBarRight: { flexDirection: 'row', gap: 8 },
+  logo: { width: 36, height: 36, resizeMode: 'contain' },
+  topBarTitle: { marginLeft: 10 },
+  topBarName: { fontSize: 16, fontWeight: '800', color: C.ink, letterSpacing: -0.3 },
+  topBarSub: { fontSize: 11, fontWeight: '500', color: C.inkSoft, marginTop: 1 },
+
+  iconBtn: {
+    width: 42, height: 42, borderRadius: 14,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
     justifyContent: 'center', alignItems: 'center',
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  hBtnDot: {
-    position: 'absolute', top: 8, right: 8,
+  notifBadge: {
+    position: 'absolute', top: 10, right: 10,
     width: 7, height: 7, borderRadius: 4,
-    backgroundColor: C.amber, borderWidth: 1.5, borderColor: C.bg,
+    backgroundColor: C.rose, borderWidth: 1.5, borderColor: C.card,
   },
-  hBtnRed: { borderColor: C.red + '44', backgroundColor: C.red + '10' },
-
-  // Section
-  sectionRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 14,
-  },
-  sectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionPip: { width: 3, height: 16, borderRadius: 2, backgroundColor: C.amber },
-  sectionTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
-  sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  sectionActionText: { color: C.amber, fontSize: 12, fontWeight: '600' },
-
-  // Stat cards
-  statGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    justifyContent: 'space-between', marginBottom: 30,
-  },
-  statCard: {
-    width: '48.5%', backgroundColor: C.surface,
-    borderRadius: 18, marginBottom: 12,
-    borderWidth: 1, borderColor: C.border, overflow: 'hidden',
-  },
-  statAccentLine: { height: 2, width: '100%' },
-  statInner: { padding: 16 },
-  statIconRing: {
-    width: 34, height: 34, borderRadius: 11,
-    borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 14,
-  },
-  statLabel: {
-    color: C.textDim, fontSize: 10, fontWeight: '700',
-    letterSpacing: 1.1, textTransform: 'uppercase', marginBottom: 5,
-  },
-  statValue: {
-    color: C.cream, fontSize: 28, fontWeight: '800',
-    letterSpacing: -0.8, marginBottom: 3,
-  },
-  statSub: { fontSize: 11, fontWeight: '500' },
-
-  // Quick tiles — 3-column grid
-  quickGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 30,
-  },
-  quickTile: {
-    width: TILE_W,
-    height: TILE_W * 1.22,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  quickTileBg: { ...StyleSheet.absoluteFillObject, borderRadius: 20 },
-  quickTileShade: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    height: '55%', opacity: 0.6,
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-  },
-  quickTileNum: {
-    position: 'absolute', top: 9, right: 11,
-    color: 'rgba(255,255,255,0.16)', fontSize: 24,
-    fontWeight: '900', letterSpacing: -1,
-  },
-  quickTileContent: {
-    flex: 1, padding: 12, justifyContent: 'space-between',
-  },
-  quickTileIconBox: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  quickTileFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
-  },
-  quickTileName: {
-    color: '#fff', fontSize: 11, fontWeight: '700',
-    letterSpacing: 0.1, flex: 1, lineHeight: 14,
+  iconBtnRed: {
+    borderColor: C.rose + '33', backgroundColor: C.roseDim,
   },
 
-  // Charts
-  chartCard: {
-    backgroundColor: C.surface, borderRadius: 18, padding: 18,
-    marginBottom: 28, borderWidth: 1, borderColor: C.border, overflow: 'hidden',
-  },
-  chartHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', marginBottom: 16,
-  },
-  chartTitle: { color: C.text, fontSize: 15, fontWeight: '700', marginBottom: 5 },
-  chartMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  chartDot: { width: 7, height: 7, borderRadius: 4 },
-  chartMetaText: { color: C.textDim, fontSize: 12, fontWeight: '500' },
-  chartBadge: {
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 8, borderWidth: 1,
-  },
-  chartBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },
-  chartLine: { marginLeft: -18, borderRadius: 0 },
+  quickGrid: { marginBottom: 24 },
 });
