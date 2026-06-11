@@ -9,8 +9,8 @@ import {
   TouchableOpacity,
   Animated,
   StatusBar,
+  Image
 } from 'react-native';
-import axios from 'axios';
 import {
   Users, BookOpen, DollarSign, Clock, Bell, LogOut,
   GraduationCap, Calendar, ClipboardCheck, Archive,
@@ -20,6 +20,7 @@ import { LineChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
+import { getDashboardStats } from '../api/dashboard.api';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -205,9 +206,7 @@ export default function DashboardScreen() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('http://192.168.1.21:5050/api/analytics/dashboard', {
-        headers: { Authorization: `Bearer ${userToken}` }, withCredentials: true,
-      });
+      const res = await getDashboardStats();
       if (res.data?.success && res.data?.data?.stats) setStats(res.data.data.stats);
     } catch (_) { }
     finally { setLoading(false); }
@@ -246,7 +245,13 @@ export default function DashboardScreen() {
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}>
           <View style={styles.headerText}>
-            <Text style={styles.headerEyebrow}>State Institute of Technology</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <Image 
+                source={require('../../assets/logo.png')} 
+                style={{ width: 24, height: 24, resizeMode: 'contain', marginRight: 8 }} 
+              />
+              <Text style={styles.headerEyebrow}>SK Patil College</Text>
+            </View>
             <View style={styles.headerTitleRow}>
               <Text style={styles.headerTitle}>Analytics</Text>
               <View style={styles.liveChip}>

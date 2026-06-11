@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "SK Patil",
+    "slug": "SK Patil",
+    "icon": "./assets/logo.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#ffffff"
+      }
+    }
+  }
+}

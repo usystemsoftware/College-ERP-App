@@ -4,7 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, UserPlus, Building, Users, DollarSign, User } from 'lucide-react-native';
+import { Home, UserPlus, Building, Users, DollarSign, User, BookOpen } from 'lucide-react-native';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -14,6 +14,7 @@ import DepartmentScreen from '../screens/DepartmentScreen';
 import SubjectScreen from '../screens/SubjectScreen';
 import StudentScreen from '../screens/StudentScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import { AuthProvider, AuthContext } from '../context/AuthContext';
 
 const Stack = createNativeStackNavigator();
@@ -84,7 +85,7 @@ function MainTabs() {
       <Tab.Screen name="Department" component={DepartmentScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Subjects" component={SubjectScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Students" component={StudentScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Profile" component={PlaceholderScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
     </Tab.Navigator>
   );
 }
