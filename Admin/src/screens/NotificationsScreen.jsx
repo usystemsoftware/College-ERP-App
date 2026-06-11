@@ -11,7 +11,6 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import axios from 'axios';
 import {
   ArrowLeft, Bell, CheckCheck, Trash2,
   Info, AlertTriangle, Calendar, MessageSquare,
@@ -19,8 +18,7 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
-
-const BASE_URL = 'http://192.168.1.21:5050';
+import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '../api/notification.api';
 
 // ─── Palette (matches Dashboard light theme) ─────────────────────────────────
 const C = {
@@ -225,10 +223,7 @@ export default function NotificationsScreen({ navigation }) {
     if (refresh) setIsRefreshing(true);
     else if (pageNum === 1) setIsLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/api/notifications/my`, {
-        headers,
-        params: { page: pageNum, limit: 20 },
-      });
+      const res = await getNotifications({ page: pageNum, limit: 20 });
       if (res.data?.success) {
         const data = res.data.data;
         setNotifications(prev =>
@@ -253,7 +248,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleMarkRead = async (id) => {
     try {
-      await axios.patch(`${BASE_URL}/api/notifications/${id}/read`, null, { headers });
+      await markNotificationRead(id);
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (err) { }
@@ -261,7 +256,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleMarkAllRead = async () => {
     try {
-      await axios.patch(`${BASE_URL}/api/notifications/mark-all-read`, null, { headers });
+      await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (err) { }
@@ -277,7 +272,7 @@ export default function NotificationsScreen({ navigation }) {
           text: 'Delete', style: 'destructive',
           onPress: async () => {
             try {
-              await axios.delete(`${BASE_URL}/api/notifications/${id}`, { headers });
+              await deleteNotification(id);
               const removed = notifications.find(n => n._id === id);
               setNotifications(prev => prev.filter(n => n._id !== id));
               if (removed && !removed.isRead) setUnreadCount(prev => Math.max(0, prev - 1));

@@ -9,10 +9,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
-  Keyboard
+  Keyboard,
+  Image
 } from 'react-native';
-import axios from 'axios';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react-native';
+import { login } from '../api/auth.api';
 import { AuthContext } from '../context/AuthContext';
 
 export default function LoginScreen({ navigation }) {
@@ -27,16 +28,10 @@ export default function LoginScreen({ navigation }) {
     setIsLoading(true);
     setError(null);
 
-    // For physical devices scanning the Expo QR code, localhost will not work.
-    // Using your computer's local IP address from the Expo logs.
-    const baseUrl = 'http://192.168.1.21:5050';
-
     try {
-      const response = await axios.post(`${baseUrl}/api/auth/login`, {
+      const response = await login({
         email,
         password
-      }, {
-        withCredentials: true
       });
 
       if (response.data.success) {
@@ -64,7 +59,10 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.glassPanel}>
             <View style={styles.logoSection}>
               <View style={styles.logoIconContainer}>
-                <ShieldCheck size={32} color="#ffffff" />
+                <Image 
+                  source={require('../../assets/logo.png')} 
+                  style={{ width: 40, height: 40, resizeMode: 'contain' }} 
+                />
               </View>
               <Text style={styles.loginTitle}>Admin Portal</Text>
               <Text style={styles.loginSubtitle}>Secure access to college resources</Text>
