@@ -42,18 +42,24 @@ export default function LoginScreen({ navigation }) {
         setError('Login failed. Please try again.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'An error occurred during login. Please try again.');
+      console.log('Login Error:', err);
+      console.log('Error Response:', err.response);
+      console.log('Error Message:', err.message);
+      setError(err.response?.data?.message || err.message || 'An error occurred during login. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const KeyboardWrapper = Platform.OS === 'web' ? React.Fragment : TouchableWithoutFeedback;
+  const keyboardWrapperProps = Platform.OS === 'web' ? {} : { onPress: Keyboard.dismiss };
 
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardWrapper {...keyboardWrapperProps}>
         <View style={styles.innerContainer}>
           
           <View style={styles.glassPanel}>
@@ -137,7 +143,7 @@ export default function LoginScreen({ navigation }) {
             </View>
           </View>
         </View>
-      </TouchableWithoutFeedback>
+      </KeyboardWrapper>
     </KeyboardAvoidingView>
   );
 }

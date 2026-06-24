@@ -162,15 +162,11 @@ function HeroBanner({ stats }) {
 
       {/* Main content */}
       <View style={heroSt.body}>
-        {/* Top row: greeting + live */}
+        {/* Top row: greeting */}
         <View style={heroSt.topRow}>
-          <View style={{ flex: 1 }}>
+          <View>
             <Text style={heroSt.greeting}>{getGreeting()} 👋</Text>
             <Text style={heroSt.collegeName}>SK Patil College</Text>
-          </View>
-          <View style={heroSt.liveRow}>
-            <PulseDot />
-            <Text style={heroSt.liveText}>LIVE</Text>
           </View>
         </View>
 
